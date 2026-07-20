@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function myOrgId() {
+      return myUserDoc().data.orgId;
+    }
+
+    function myRole() {
+      return myUserDoc().data.role;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && myUserDoc().data.role == 'SUPER_ADMIN';
+    }
+
+    function isMemberOfOrg(orgId) {
+      return isSignedIn() && myOrgId() == orgId;
+    }
+
+    function isResponsableOfOrg(orgId) {
+      return isMemberOfOrg(orgId) && myRole() == 'RESPONSABLE';
+    }
+
+    // --- users/{uid} : chacun ne lit/écrit que sa propre fiche ---
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // --- organizations/{orgId} ---
+    match /organizations/{orgId} {
+      allow read: if isMemberOfOrg(orgId) || isSuperAdmin();
+      // La création se fait uniquement via Cloud Function (signup) pour garantir
+      // la cohérence avec le compte Stripe et le user racine.
+      allow create: if false;
+      allow update: if isResponsableOfOrg(orgId) || isSuperAdmin();
+      allow delete: if false;
+
+      // --- departments ---
+      match /departments/{deptId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow create: if isResponsableOfOrg(orgId);
+        allow update: if isMemberOfOrg(orgId); // EQUIPE peut cocher une checklist / mettre à jour une tâche
+        allow delete: if isResponsableOfOrg(orgId);
+      }
+
+      // --- members ---
+      match /members/{uid} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if isResponsableOfOrg(orgId);
+      }
+
+      // --- invitations ---
+      match /invitations/{token} {
+        // Lecture publique nécessaire pour vérifier un token d'invitation avant login
+        allow get: if true;
+        allow list: if isResponsableOfOrg(orgId);
+        allow create: if isResponsableOfOrg(orgId);
+        allow update: if isResponsableOfOrg(orgId) || isSignedIn(); // marquer used=true à l'acceptation
+        allow delete: if isResponsableOfOrg(orgId);
+      }
+    }
+  }
+}

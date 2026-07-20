@@ -1,0 +1,218 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { db } from '../firebase';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+
+// HELPERS
+const fmtDateTime = (date) => new Date(date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const isOverdue = (dateStr) => dateStr && new Date(dateStr) < new Date();
+
+export default function TabContent({ type, dept, isAdmin, departments }) {
+  if (type === 'procedure') return <ProcedureTab dept={dept} isAdmin={isAdmin} />;
+  if (type === 'checklist') return <ChecklistTab dept={dept} isAdmin={isAdmin} />;
+  if (type === 'reminders') return <RemindersTab dept={dept} isAdmin={isAdmin} />;
+  if (type === 'pending') return <PendingTab dept={dept} isAdmin={isAdmin} />;
+  if (type === 'TRASH') return <TrashView departments={departments} isAdmin={isAdmin} />;
+  return null;
+}
+
+function PendingTab({ dept, isAdmin }) {
+  const { org } = useAuth();
+  const orgId = org?.id;
+  const [input, setInput] = useState('');
+  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || "0000";
+
+  useEffect(() => {
+    const now = Date.now();
+    let changed = false;
+    const validTasks = (dept.pendingTasks || []).filter(t => {
+      if (t.status === 'archived' && (now - t.validatedAt > 31 * 24 * 60 * 60 * 1000)) { changed = true; return false; }
+      return true;
+    });
+    if (changed) updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: validTasks });
+  }, [dept.pendingTasks, dept.id]);
+
+  const addRemark = async () => {
+    const v = input.trim();
+    if (!v) return;
+    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), {
+      pendingTasks: [...(dept.pendingTasks || []), { id: Date.now(), text: v, status: 'pending', createdAt: Date.now() }]
+    });
+    setInput('');
+  };
+
+  const validateTask = async (taskId) => {
+    const code = prompt("Veuillez entrer le code admin du département pour valider :");
+    if (code === ADMIN_PIN) {
+      const updated = (dept.pendingTasks || []).map(t => t.id === taskId ? { ...t, status: 'archived', validatedAt: Date.now() } : t);
+      await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: updated });
+    } else if (code !== null) alert("Code de validation incorrect.");
+  };
+
+  const removeTask = async (idx) => {
+    if (confirm("Supprimer définitivement cette remarque ?")) {
+       await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: (dept.pendingTasks || []).filter((_, i) => i !== idx) });
+    }
+  };
+
+  const tasks = dept.pendingTasks || [];
+  const pending = tasks.filter(t => t.status === 'pending');
+  const archived = tasks.filter(t => t.status === 'archived').sort((a, b) => b.validatedAt - a.validatedAt);
+
+  return (
+    <div className="checklist-wrap">
+      <div className="check-add">
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRemark()} placeholder="Nouvelle remarque/tâche en attente..." />
+        <button className="btn btn-primary" onClick={addRemark}>+</button>
+      </div>
+      <div className="section-title">Remarques En Cours</div>
+      {pending.map(t => {
+        const idx = tasks.findIndex(task => task.id === t.id);
+        return (
+          <div key={t.id} className="check-item">
+            <span style={{flex: 1}}>{t.text}</span>
+            <button className="btn btn-success" onClick={() => validateTask(t.id)}>✓ Valider</button>
+            {isAdmin && <button className="btn-icon" onClick={() => removeTask(idx)}>✕</button>}
+          </div>
+        );
+      })}
+      <div className="section-title" style={{ marginTop: 40 }}>Archives Validées (31 jours)</div>
+      {archived.map(t => {
+         const idx = tasks.findIndex(task => task.id === t.id);
+         return (
+           <div key={t.id} className="check-item done" style={{opacity: 0.6}}>
+             <span style={{flex: 1}}>{t.text}</span>
+             <span className="check-date">Validé le {fmtDateTime(t.validatedAt)}</span>
+             {isAdmin && <button className="btn-icon" onClick={() => removeTask(idx)}>✕</button>}
+           </div>
+         );
+      })}
+    </div>
+  );
+}
+
+function ProcedureTab({ dept, isAdmin }) {
+  const { org } = useAuth();
+  const orgId = org?.id;
+  const [isEditing, setIsEditing] = useState(false);
+  const quillRef = useRef(null);
+  const quillInst = useRef(null);
+
+  useEffect(() => {
+    if (isEditing && quillRef.current && !quillInst.current) {
+      quillInst.current = new window.Quill(quillRef.current, { theme: 'snow', modules: { toolbar: [[{ header: [1, 2, false] }], ['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] } });
+      quillInst.current.root.innerHTML = dept.procedure || '';
+    }
+    return () => { if (!isEditing) quillInst.current = null; };
+  }, [isEditing]);
+
+  const save = async () => {
+    if (!quillInst.current) return;
+    const html = quillInst.current.root.innerHTML;
+    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), {
+      procedure: html,
+      archives: [{ content: dept.procedure || '', date: Date.now() }, ...(dept.archives || [])].slice(0, 4),
+      updatedAt: Date.now()
+    });
+    quillInst.current = null; setIsEditing(false);
+  };
+
+  return (
+    <div className="pdf-wrap">
+      {!isEditing && (
+        <div className="pdf-toolbar no-print">
+          <div>{dept.updatedAt && <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis à jour : {fmtDateTime(dept.updatedAt)}</span>}</div>
+          <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-outline" onClick={() => window.print()}>↓ PDF</button>{isAdmin && <button className="btn btn-primary" onClick={() => setIsEditing(true)}>✎ Modifier</button>}</div>
+        </div>
+      )}
+      {isEditing ? (
+        <div style={{ width: '100%', maxWidth: 800 }}>
+          <div className="editor-wrap"><div ref={quillRef} /></div>
+          <div className="editor-actions no-print"><button className="btn btn-outline" onClick={() => setIsEditing(false)}>Annuler</button><button className="btn btn-primary" onClick={save}>✓ Enregistrer</button></div>
+        </div>
+      ) : (
+        <div className="pdf-view">
+          <div className="pdf-header"><div className="pdf-label">Document Interne</div><div className="pdf-title">{dept.name}</div></div>
+          <div className="pdf-content" dangerouslySetInnerHTML={{ __html: dept.procedure || '<p style="color:#64748B;font-style:italic">Aucune procédure rédigée.</p>' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChecklistTab({ dept, isAdmin }) {
+  const { org } = useAuth();
+  const orgId = org?.id;
+  const [input, setInput] = useState('');
+  const addTask = async () => { const v = input.trim(); if (!v) return; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: [...(dept.checklist || []), { id: Date.now(), text: v, done: false, createdAt: Date.now() }] }); setInput(''); };
+  const toggle = async (idx) => { const nl = [...(dept.checklist || [])]; nl[idx] = { ...nl[idx], done: !nl[idx].done, checkedAt: !nl[idx].done ? Date.now() : null }; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: nl }); };
+  const remove = async (idx) => { await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: dept.checklist.filter((_, i) => i !== idx) }); };
+  
+  const list = dept.checklist || [];
+  return (
+    <div className="checklist-wrap">
+      {isAdmin && <div className="check-add"><input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Nouvelle tâche…" /><button className="btn btn-primary" onClick={addTask}>+</button></div>}
+      <div className="section-title">En cours</div>
+      {list.map((t, i) => !t.done && (
+        <div key={t.id || i} className="check-item">
+          <input type="checkbox" className="check-cb" checked={false} onChange={() => toggle(i)} />
+          <label onClick={() => toggle(i)}>{t.text}</label>
+          {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
+        </div>
+      ))}
+      <div className="section-title" style={{ marginTop: 20 }}>Complétées</div>
+      {list.map((t, i) => t.done && (
+        <div key={t.id || i} className="check-item done">
+          <input type="checkbox" className="check-cb" checked={true} onChange={() => toggle(i)} />
+          <label onClick={() => toggle(i)}>{t.text}</label>
+          {t.checkedAt && <span className="check-date">{fmtDateTime(t.checkedAt)}</span>}
+          {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RemindersTab({ dept, isAdmin }) {
+  const { org } = useAuth();
+  const orgId = org?.id;
+  const [text, setText] = useState(''); const [date, setDate] = useState('');
+  const add = async () => { if (!text.trim() || !date) return; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { reminders: [...(dept.reminders || []), { id: Date.now(), text: text.trim(), date }] }); setText(''); setDate(''); };
+  const remove = async (idx) => { await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { reminders: dept.reminders.filter((_, i) => i !== idx) }); };
+  const reminders = [...(dept.reminders || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+  return (
+    <div className="reminders-wrap">
+      {isAdmin && <div className="reminder-form"><input type="text" placeholder="Rappel…" value={text} onChange={e => setText(e.target.value)} /><input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} /><button className="btn btn-primary" onClick={add}>+ Ajouter</button></div>}
+      {reminders.map((r, i) => {
+        const od = isOverdue(r.date);
+        return (
+          <div key={r.id || i} className={`reminder-item ${od ? 'reminder-overdue' : ''}`}>
+            <span className="reminder-text">{r.text}</span><span className="reminder-date">{od ? '⚠ ' : '🕐 '} {fmtDateTime(r.date)}</span>
+            {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrashView({ departments, isAdmin }) {
+  const { org } = useAuth();
+  const orgId = org?.id;
+  const deleted = departments.filter(d => d.deletedAt);
+  useEffect(() => {
+    if(isAdmin) {
+      deleted.forEach(d => { if (Date.now() - d.deletedAt > 15 * 24 * 60 * 60 * 1000) deleteDoc(doc(db, 'organizations', orgId, 'departments', d.id)); });
+    }
+  }, []);
+  return (
+    <div className="main-body">
+      <div className="section-title">Corbeille</div>
+      <div className="trash-wrap">
+        {deleted.map(d => (
+          <div key={d.id} className="trash-item"><span style={{ fontWeight: 600 }}>{d.name}</span>{isAdmin && <button className="btn-restore" onClick={() => updateDoc(doc(db, 'organizations', orgId, 'departments', d.id), { deletedAt: null })}>Restaurer</button>}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
