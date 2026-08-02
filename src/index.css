@@ -422,3 +422,11 @@ img, svg { max-width: 100%; }
 * { min-width: 0; }
 h1, h2, h3, p { overflow-wrap: break-word; }
 body { overflow-x: hidden; }
+
+/* Fix : le titre de la maquette (span) était écrasé par la règle des points de la barre (aussi des span) */
+.mock-window-bar .mock-window-title {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+}
