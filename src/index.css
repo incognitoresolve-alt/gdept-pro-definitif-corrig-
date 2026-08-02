@@ -415,3 +415,10 @@ img, svg { max-width: 100%; }
   .pricing-cards, .settings-plans { grid-template-columns: 1fr; }
   .site-header { padding: 16px 20px; }
 }
+
+/* Fix débordement horizontal mobile */
+.hero-text, .hero-mock { min-width: 0; }
+.hero, .site-header, .site-nav, .section, .settings-wrap, .hero-ctas { min-width: 0; }
+* { min-width: 0; }
+h1, h2, h3, p { overflow-wrap: break-word; }
+body { overflow-x: hidden; }
