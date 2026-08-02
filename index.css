@@ -1,218 +1,506 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../firebase';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { useAuth } from '../context/AuthContext';
-
-// HELPERS
-const fmtDateTime = (date) => new Date(date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-const isOverdue = (dateStr) => dateStr && new Date(dateStr) < new Date();
-
-export default function TabContent({ type, dept, isAdmin, departments }) {
-  if (type === 'procedure') return <ProcedureTab dept={dept} isAdmin={isAdmin} />;
-  if (type === 'checklist') return <ChecklistTab dept={dept} isAdmin={isAdmin} />;
-  if (type === 'reminders') return <RemindersTab dept={dept} isAdmin={isAdmin} />;
-  if (type === 'pending') return <PendingTab dept={dept} isAdmin={isAdmin} />;
-  if (type === 'TRASH') return <TrashView departments={departments} isAdmin={isAdmin} />;
-  return null;
+/* ==========================================================================
+   1. RESET ET FIX MOBILE (Dynamic Viewport)
+   ========================================================================== */
+:root {
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 80px;
+  --header-height: 60px;
+  --muted: #64748B;
+  --border-color: #eaeaea;
+  --primary: #2563eb;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --radius: 10px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
-function PendingTab({ dept, isAdmin }) {
-  const { org } = useAuth();
-  const orgId = org?.id;
-  const [input, setInput] = useState('');
-  const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || "0000";
-
-  useEffect(() => {
-    const now = Date.now();
-    let changed = false;
-    const validTasks = (dept.pendingTasks || []).filter(t => {
-      if (t.status === 'archived' && (now - t.validatedAt > 31 * 24 * 60 * 60 * 1000)) { changed = true; return false; }
-      return true;
-    });
-    if (changed) updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: validTasks });
-  }, [dept.pendingTasks, dept.id]);
-
-  const addRemark = async () => {
-    const v = input.trim();
-    if (!v) return;
-    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), {
-      pendingTasks: [...(dept.pendingTasks || []), { id: Date.now(), text: v, status: 'pending', createdAt: Date.now() }]
-    });
-    setInput('');
-  };
-
-  const validateTask = async (taskId) => {
-    const code = prompt("Veuillez entrer le code admin du département pour valider :");
-    if (code === ADMIN_PIN) {
-      const updated = (dept.pendingTasks || []).map(t => t.id === taskId ? { ...t, status: 'archived', validatedAt: Date.now() } : t);
-      await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: updated });
-    } else if (code !== null) alert("Code de validation incorrect.");
-  };
-
-  const removeTask = async (idx) => {
-    if (confirm("Supprimer définitivement cette remarque ?")) {
-       await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { pendingTasks: (dept.pendingTasks || []).filter((_, i) => i !== idx) });
-    }
-  };
-
-  const tasks = dept.pendingTasks || [];
-  const pending = tasks.filter(t => t.status === 'pending');
-  const archived = tasks.filter(t => t.status === 'archived').sort((a, b) => b.validatedAt - a.validatedAt);
-
-  return (
-    <div className="checklist-wrap">
-      <div className="check-add">
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRemark()} placeholder="Nouvelle remarque/tâche en attente..." />
-        <button className="btn btn-primary" onClick={addRemark}>+</button>
-      </div>
-      <div className="section-title">Remarques En Cours</div>
-      {pending.map(t => {
-        const idx = tasks.findIndex(task => task.id === t.id);
-        return (
-          <div key={t.id} className="check-item">
-            <span style={{flex: 1}}>{t.text}</span>
-            <button className="btn btn-success" onClick={() => validateTask(t.id)}>✓ Valider</button>
-            {isAdmin && <button className="btn-icon" onClick={() => removeTask(idx)}>✕</button>}
-          </div>
-        );
-      })}
-      <div className="section-title" style={{ marginTop: 40 }}>Archives Validées (31 jours)</div>
-      {archived.map(t => {
-         const idx = tasks.findIndex(task => task.id === t.id);
-         return (
-           <div key={t.id} className="check-item done" style={{opacity: 0.6}}>
-             <span style={{flex: 1}}>{t.text}</span>
-             <span className="check-date">Validé le {fmtDateTime(t.validatedAt)}</span>
-             {isAdmin && <button className="btn-icon" onClick={() => removeTask(idx)}>✕</button>}
-           </div>
-         );
-      })}
-    </div>
-  );
+/* FIX 1 : Applique le border-box universel pour éviter les débordements de padding */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-function ProcedureTab({ dept, isAdmin }) {
-  const { org } = useAuth();
-  const orgId = org?.id;
-  const [isEditing, setIsEditing] = useState(false);
-  const quillRef = useRef(null);
-  const quillInst = useRef(null);
-
-  useEffect(() => {
-    if (isEditing && quillRef.current && !quillInst.current) {
-      quillInst.current = new window.Quill(quillRef.current, { theme: 'snow', modules: { toolbar: [[{ header: [1, 2, false] }], ['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] } });
-      quillInst.current.root.innerHTML = dept.procedure || '';
-    }
-    return () => { if (!isEditing) quillInst.current = null; };
-  }, [isEditing]);
-
-  const save = async () => {
-    if (!quillInst.current) return;
-    const html = quillInst.current.root.innerHTML;
-    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), {
-      procedure: html,
-      archives: [{ content: dept.procedure || '', date: Date.now() }, ...(dept.archives || [])].slice(0, 4),
-      updatedAt: Date.now()
-    });
-    quillInst.current = null; setIsEditing(false);
-  };
-
-  return (
-    <div className="pdf-wrap">
-      {!isEditing && (
-        <div className="pdf-toolbar no-print">
-          <div>{dept.updatedAt && <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis à jour : {fmtDateTime(dept.updatedAt)}</span>}</div>
-          <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-outline" onClick={() => window.print()}>↓ PDF</button>{isAdmin && <button className="btn btn-primary" onClick={() => setIsEditing(true)}>✎ Modifier</button>}</div>
-        </div>
-      )}
-      {isEditing ? (
-        <div style={{ width: '100%', maxWidth: 800 }}>
-          <div className="editor-wrap"><div ref={quillRef} /></div>
-          <div className="editor-actions no-print"><button className="btn btn-outline" onClick={() => setIsEditing(false)}>Annuler</button><button className="btn btn-primary" onClick={save}>✓ Enregistrer</button></div>
-        </div>
-      ) : (
-        <div className="pdf-view">
-          <div className="pdf-header"><div className="pdf-label">Document Interne</div><div className="pdf-title">{dept.name}</div></div>
-          <div className="pdf-content" dangerouslySetInnerHTML={{ __html: dept.procedure || '<p style="color:#64748B;font-style:italic">Aucune procédure rédigée.</p>' }} />
-        </div>
-      )}
-    </div>
-  );
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  background-color: #f8f9fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px; /* évite le zoom auto iOS sur focus input */
+  -webkit-text-size-adjust: 100%;
 }
 
-function ChecklistTab({ dept, isAdmin }) {
-  const { org } = useAuth();
-  const orgId = org?.id;
-  const [input, setInput] = useState('');
-  const addTask = async () => { const v = input.trim(); if (!v) return; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: [...(dept.checklist || []), { id: Date.now(), text: v, done: false, createdAt: Date.now() }] }); setInput(''); };
-  const toggle = async (idx) => { const nl = [...(dept.checklist || [])]; nl[idx] = { ...nl[idx], done: !nl[idx].done, checkedAt: !nl[idx].done ? Date.now() : null }; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: nl }); };
-  const remove = async (idx) => { await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { checklist: dept.checklist.filter((_, i) => i !== idx) }); };
-  
-  const list = dept.checklist || [];
-  return (
-    <div className="checklist-wrap">
-      {isAdmin && <div className="check-add"><input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Nouvelle tâche…" /><button className="btn btn-primary" onClick={addTask}>+</button></div>}
-      <div className="section-title">En cours</div>
-      {list.map((t, i) => !t.done && (
-        <div key={t.id || i} className="check-item">
-          <input type="checkbox" className="check-cb" checked={false} onChange={() => toggle(i)} />
-          <label onClick={() => toggle(i)}>{t.text}</label>
-          {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
-        </div>
-      ))}
-      <div className="section-title" style={{ marginTop: 20 }}>Complétées</div>
-      {list.map((t, i) => t.done && (
-        <div key={t.id || i} className="check-item done">
-          <input type="checkbox" className="check-cb" checked={true} onChange={() => toggle(i)} />
-          <label onClick={() => toggle(i)}>{t.text}</label>
-          {t.checkedAt && <span className="check-date">{fmtDateTime(t.checkedAt)}</span>}
-          {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
-        </div>
-      ))}
-    </div>
-  );
+img, svg, video {
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
-function RemindersTab({ dept, isAdmin }) {
-  const { org } = useAuth();
-  const orgId = org?.id;
-  const [text, setText] = useState(''); const [date, setDate] = useState('');
-  const add = async () => { if (!text.trim() || !date) return; await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { reminders: [...(dept.reminders || []), { id: Date.now(), text: text.trim(), date }] }); setText(''); setDate(''); };
-  const remove = async (idx) => { await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), { reminders: dept.reminders.filter((_, i) => i !== idx) }); };
-  const reminders = [...(dept.reminders || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
-  return (
-    <div className="reminders-wrap">
-      {isAdmin && <div className="reminder-form"><input type="text" placeholder="Rappel…" value={text} onChange={e => setText(e.target.value)} /><input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} /><button className="btn btn-primary" onClick={add}>+ Ajouter</button></div>}
-      {reminders.map((r, i) => {
-        const od = isOverdue(r.date);
-        return (
-          <div key={r.id || i} className={`reminder-item ${od ? 'reminder-overdue' : ''}`}>
-            <span className="reminder-text">{r.text}</span><span className="reminder-date">{od ? '⚠ ' : '🕐 '} {fmtDateTime(r.date)}</span>
-            {isAdmin && <button className="btn-icon" onClick={() => remove(i)}>✕</button>}
-          </div>
-        );
-      })}
-    </div>
-  );
+/* ==========================================================================
+   2. LAYOUT PRINCIPAL (AppShell.jsx)
+   ========================================================================== */
+.app-shell-layout {
+  display: flex;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
 }
 
-function TrashView({ departments, isAdmin }) {
-  const { org } = useAuth();
-  const orgId = org?.id;
-  const deleted = departments.filter(d => d.deletedAt);
-  useEffect(() => {
-    if(isAdmin) {
-      deleted.forEach(d => { if (Date.now() - d.deletedAt > 15 * 24 * 60 * 60 * 1000) deleteDoc(doc(db, 'organizations', orgId, 'departments', d.id)); });
-    }
-  }, []);
-  return (
-    <div className="main-body">
-      <div className="section-title">Corbeille</div>
-      <div className="trash-wrap">
-        {deleted.map(d => (
-          <div key={d.id} className="trash-item"><span style={{ fontWeight: 600 }}>{d.name}</span>{isAdmin && <button className="btn-restore" onClick={() => updateDoc(doc(db, 'organizations', orgId, 'departments', d.id), { deletedAt: null })}>Restaurer</button>}</div>
-        ))}
-      </div>
-    </div>
-  );
+.main-content {
+  flex: 1;
+  /* FIX 2 : Remplacé 100dvh par 100% pour respecter le contexte Flexbox */
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0; /* empêche le débordement flex sur mobile */
+  padding: 16px;
+  padding-bottom: calc(16px + var(--safe-bottom));
+}
+
+.main-body {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    padding: 12px;
+    padding-bottom: calc(12px + var(--safe-bottom));
+  }
+}
+
+/* ==========================================================================
+   3. SIDEBAR RESPONSIVE & ÉCRANS PLIABLES
+   ========================================================================== */
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  background: #ffffff;
+  border-right: 1px solid var(--border-color);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease;
+  z-index: 50;
+  flex-shrink: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* FIX 4 : Overlay pour fermer le menu sur mobile */
+.sidebar-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Écrans étroits (Smartphones classiques ou écran extérieur d'un pliable) */
+@media (max-width: 767px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 15px rgba(0,0,0,0.05);
+    width: min(var(--sidebar-width), 85vw);
+    padding-top: var(--safe-top);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.is-open {
+    display: block;
+    opacity: 1;
+  }
+}
+
+/* Écrans intermédiaires / intérieurs (Format tablette ou écran intérieur déplié) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .sidebar {
+    position: relative;
+    transform: none;
+    width: var(--sidebar-collapsed-width);
+  }
+
+  .sidebar .nav-text {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   4. ERGONOMIE TACTILE (Hitboxes et Hover)
+   ========================================================================== */
+
+button, a, input, select, textarea, .nav-item {
+  min-height: 44px;
+  font-size: 16px; /* évite le zoom auto iOS */
+  /* FIX 3 : Obligatoire pour que le min-height soit respecté sur les balises a et span */
+  display: inline-flex;
+  align-items: center;
+}
+
+button, a, .nav-item, .btn-icon {
+  min-width: 44px;
+  justify-content: center;
+}
+
+input, select, textarea {
+  width: 100%;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .btn:hover, .nav-item:hover {
+    background-color: transparent;
+  }
+
+  .btn:active, .nav-item:active {
+    background-color: rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* ==========================================================================
+   5. BOUTONS GÉNÉRIQUES
+   ========================================================================== */
+.btn {
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-outline { background: #fff; color: #1e293b; border: 1px solid var(--border-color); }
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn-icon:active { background: rgba(0,0,0,0.06); }
+
+.btn-restore {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   6. CHECKLIST / PENDING TAB (checklist-wrap, check-item, etc.)
+   ========================================================================== */
+.checklist-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.check-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.check-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.check-item.done {
+  background: #f8fafc;
+}
+
+.check-item span,
+.check-item label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.check-item label {
+  flex: 1;
+  cursor: pointer;
+}
+
+.check-cb {
+  min-width: 20px;
+  min-height: 20px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+}
+
+.check-date {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .check-item {
+    align-items: flex-start;
+  }
+  .check-date {
+    width: 100%;
+    order: 3;
+  }
+}
+
+/* ==========================================================================
+   7. REMINDERS TAB
+   ========================================================================== */
+.reminders-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.reminder-form input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.reminder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.reminder-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reminder-date {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.reminder-overdue {
+  border-color: var(--danger);
+  background: #fef2f2;
+}
+
+.reminder-overdue .reminder-date {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .reminder-form input,
+  .reminder-form button {
+    flex: 1 1 100%;
+  }
+}
+
+/* ==========================================================================
+   8. PROCEDURE TAB (éditeur Quill + vue impression)
+   ========================================================================== */
+.pdf-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pdf-toolbar {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.pdf-view {
+  width: 100%;
+  max-width: 800px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 20px;
+  overflow-x: auto;
+}
+
+.pdf-header {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.pdf-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pdf-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.pdf-content {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.pdf-content img {
+  max-width: 100%;
+}
+
+.editor-wrap {
+  width: 100%;
+  background: #fff;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .pdf-view { padding: 14px; }
+  .pdf-toolbar { justify-content: center; }
+  .editor-actions { justify-content: stretch; }
+  .editor-actions .btn { flex: 1; justify-content: center; }
+}
+
+/* Impression : masque tout ce qui n'est pas le contenu du document */
+@media print {
+  .sidebar, .sidebar-overlay, .no-print {
+    display: none !important;
+  }
+  .main-content, .app-shell-layout {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .pdf-view {
+    border: none;
+    box-shadow: none;
+    max-width: 100%;
+    padding: 0;
+  }
+}
+
+/* ==========================================================================
+   9. CORBEILLE (TRASH)
+   ========================================================================== */
+.trash-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   10. UTILITAIRES RESPONSIVE GÉNÉRAUX
+   ========================================================================== */
+.hide-mobile {
+  display: initial;
+}
+.show-mobile {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .hide-mobile {
+    display: none !important;
+  }
+  .show-mobile {
+    display: inline-flex !important;
+  }
+}
+
+/* Empêche tout élément fixe/large de forcer un scroll horizontal */
+table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
