@@ -68,7 +68,9 @@ service cloud.firestore {
         allow get: if true;
         allow list: if isResponsableOfOrg(orgId);
         allow create: if isResponsableOfOrg(orgId);
-        allow update: if isResponsableOfOrg(orgId) || isSignedIn(); // marquer used=true à l'acceptation
+        // Le marquage used=true à l'acceptation se fait via Cloud Function (Admin SDK,
+        // qui ignore ces règles) : aucun accès en écriture direct n'est nécessaire côté client.
+        allow update: if isResponsableOfOrg(orgId);
         allow delete: if isResponsableOfOrg(orgId);
       }
     }
