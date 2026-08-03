@@ -113,7 +113,6 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div>© {new Date().getFullYear()} G-Dept Pro. Fait pour les églises.</div>
       <div className="site-footer-links">
-        <Link to="/mentions-legales">Mentions légales</Link>
         <Link to="/confidentialite">Confidentialité</Link>
       </div>
     </footer>
