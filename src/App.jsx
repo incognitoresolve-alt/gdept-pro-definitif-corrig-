@@ -1,9 +1,9 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-import Landing from './pages/Landing';
+import Landing, { SiteHeader, SiteFooter } from './pages/Landing';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -12,6 +12,21 @@ import AppShell from './pages/AppShell';
 import Settings from './pages/Settings';
 import SuperAdmin from './pages/SuperAdmin';
 import { MentionsLegales, Confidentialite } from './pages/Legal';
+
+function NotFound() {
+  return (
+    <div className="site-scroll">
+      <SiteHeader />
+      <section className="section">
+        <div className="section-inner narrow legal-content">
+          <h1>Page introuvable</h1>
+          <p>Cette page n'existe pas ou a été déplacée. <Link to="/">Retour à l'accueil</Link></p>
+        </div>
+      </section>
+      <SiteFooter />
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -33,6 +48,8 @@ export default function App() {
 
           {/* Back-office éditeur */}
           <Route path="/admin" element={<ProtectedRoute requireSuperAdmin><SuperAdmin /></ProtectedRoute>} />
+
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

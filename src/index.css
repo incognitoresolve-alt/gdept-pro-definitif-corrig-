@@ -281,7 +281,10 @@ img, svg { max-width: 100%; }
 .faq-item p { font-size: 14px; color: var(--muted); line-height: 1.7; }
 
 .legal-content h1 { font-family: var(--font-head); font-size: 30px; margin-bottom: 24px; }
+.legal-content h2 { font-family: var(--font-head); font-size: 18px; margin: 28px 0 10px; color: var(--text); }
 .legal-content p { color: var(--muted); line-height: 1.8; margin-bottom: 16px; }
+.legal-content ul { color: var(--muted); line-height: 1.8; margin: 0 0 16px; padding-left: 22px; }
+.legal-content li { margin-bottom: 6px; }
 
 /* --- Auth screens (login / signup / invitation) --- */
 .auth-screen {
