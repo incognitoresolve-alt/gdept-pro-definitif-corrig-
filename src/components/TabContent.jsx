@@ -103,7 +103,7 @@ function ProcedureTab({ dept, isAdmin }) {
       quillInst.current = new window.Quill(quillRef.current, { theme: 'snow', modules: { toolbar: [[{ header: [1, 2, false] }], ['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] } });
       quillInst.current.root.innerHTML = dept.procedure || '';
     }
-    return () => { if (!isEditing) quillInst.current = null; };
+    return () => { quillInst.current = null; };
   }, [isEditing]);
 
   const save = async () => {
