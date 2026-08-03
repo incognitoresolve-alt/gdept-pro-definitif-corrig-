@@ -24,7 +24,7 @@ export default function Landing() {
       {/* HERO */}
       <section className="hero">
         <div className="hero-text">
-          <div className="eyebrow">Pour les églises francophones</div>
+          <div className="eyebrow">Pour toute église</div>
           <h1>Chaque département de votre église,<br />organisé comme un vrai bulletin.</h1>
           <p className="hero-sub">
             Procédures, checklists, rappels et suivi d'équipe — dans un seul outil que vos bénévoles
@@ -41,7 +41,7 @@ export default function Landing() {
           <div className="mock-window">
             <div className="mock-window-bar">
               <span /><span /><span />
-              <span className="mock-window-title">Ma Église — Départements</span>
+              <span className="mock-window-title">Mon Église — Départements</span>
             </div>
             <div className="mock-window-body">
               {DEPTS.map(d => (
@@ -111,7 +111,7 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div>© {new Date().getFullYear()} G-Dept Pro. Fait pour les églises francophones.</div>
+      <div>© {new Date().getFullYear()} G-Dept Pro. Fait pour les églises.</div>
       <div className="site-footer-links">
         <Link to="/mentions-legales">Mentions légales</Link>
         <Link to="/confidentialite">Confidentialité</Link>
