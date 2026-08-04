@@ -1,5 +1,8 @@
 name = "gdept-pro-definitif-corrig"
 compatibility_date = "2024-09-23"
+# Déclenche un nouveau build Cloudflare Workers Builds pour prendre en compte
+# les variables d'environnement VITE_FIREBASE_* / VITE_STRIPE_* ajoutées dans
+# Paramètres > Build > Variables et secrets.
 
 # Déploiement en tant que site statique (build Vite dans dist/) via Workers Assets.
 # Pas de script Worker : uniquement des fichiers statiques servis directement.
