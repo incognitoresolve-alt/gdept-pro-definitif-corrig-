@@ -216,7 +216,7 @@ img, svg { max-width: 100%; }
 .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
 .hero-note { font-size: 13px; color: rgba(255,255,255,0.55); }
 
-.btn-hero-primary, .btn-hero-secondary {
+.btn-hero-primary, .btn-hero-secondary, .btn-hero-outline-dark {
   font-family: var(--font-body); font-weight: 700; font-size: 15px; padding: 14px 26px;
   border-radius: 999px; text-decoration: none; display: inline-block; transition: transform 0.15s ease;
 }
@@ -224,6 +224,10 @@ img, svg { max-width: 100%; }
 .btn-hero-primary:hover { transform: translateY(-1px); background: var(--accent-hover); }
 .btn-hero-secondary { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
 .btn-hero-secondary:hover { border-color: #fff; }
+/* Variante pour fond clair (ex: carte tarif sur fond blanc) — btn-hero-secondary
+   est illisible hors du hero dégradé (texte blanc sur fond blanc). */
+.btn-hero-outline-dark { background: transparent; color: var(--brand-violet); border: 1.5px solid var(--border); }
+.btn-hero-outline-dark:hover { border-color: var(--brand-violet); background: rgba(74,21,163,0.05); transform: translateY(-1px); }
 
 .hero-mock { display: flex; justify-content: center; }
 .mock-window { width: 100%; max-width: 380px; background: #fff; border-radius: 14px; box-shadow: 0 30px 60px rgba(0,0,0,0.35); overflow: hidden; }

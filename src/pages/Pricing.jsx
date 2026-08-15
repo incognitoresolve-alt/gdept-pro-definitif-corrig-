@@ -33,7 +33,7 @@ export default function Pricing() {
                 <li>Export PDF</li>
                 <li>Sans engagement</li>
               </ul>
-              <Link to="/inscription" className="btn-hero-secondary" style={{ width: '100%', textAlign: 'center' }}>Démarrer l'essai gratuit</Link>
+              <Link to="/inscription" className="btn-hero-outline-dark" style={{ width: '100%', textAlign: 'center' }}>Démarrer l'essai gratuit</Link>
             </div>
 
             <div className="price-card price-card-featured">
