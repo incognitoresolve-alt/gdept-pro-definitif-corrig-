@@ -12,6 +12,7 @@ export default function TabContent({ type, dept, isAdmin, departments }) {
   if (type === 'checklist') return <ChecklistTab dept={dept} isAdmin={isAdmin} />;
   if (type === 'reminders') return <RemindersTab dept={dept} isAdmin={isAdmin} />;
   if (type === 'pending') return <PendingTab dept={dept} isAdmin={isAdmin} />;
+  if (type === 'report') return <ReportTab dept={dept} isAdmin={isAdmin} />;
   if (type === 'TRASH') return <TrashView departments={departments} isAdmin={isAdmin} />;
   return null;
 }
@@ -91,7 +92,7 @@ function PendingTab({ dept, isAdmin }) {
   );
 }
 
-function ProcedureTab({ dept, isAdmin }) {
+function RichTextTab({ dept, isAdmin, field, updatedAtField, docLabel, emptyText, keepArchive }) {
   const { org } = useAuth();
   const orgId = org?.id;
   const [isEditing, setIsEditing] = useState(false);
@@ -101,7 +102,7 @@ function ProcedureTab({ dept, isAdmin }) {
   useEffect(() => {
     if (isEditing && quillRef.current && !quillInst.current) {
       quillInst.current = new window.Quill(quillRef.current, { theme: 'snow', modules: { toolbar: [[{ header: [1, 2, false] }], ['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] } });
-      quillInst.current.root.innerHTML = dept.procedure || '';
+      quillInst.current.root.innerHTML = dept[field] || '';
     }
     return () => { quillInst.current = null; };
   }, [isEditing]);
@@ -109,11 +110,11 @@ function ProcedureTab({ dept, isAdmin }) {
   const save = async () => {
     if (!quillInst.current) return;
     const html = quillInst.current.root.innerHTML;
-    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), {
-      procedure: html,
-      archives: [{ content: dept.procedure || '', date: Date.now() }, ...(dept.archives || [])].slice(0, 4),
-      updatedAt: Date.now()
-    });
+    const payload = { [field]: html, [updatedAtField]: Date.now() };
+    if (keepArchive) {
+      payload.archives = [{ content: dept[field] || '', date: Date.now() }, ...(dept.archives || [])].slice(0, 4);
+    }
+    await updateDoc(doc(db, 'organizations', orgId, 'departments', dept.id), payload);
     quillInst.current = null; setIsEditing(false);
   };
 
@@ -121,7 +122,7 @@ function ProcedureTab({ dept, isAdmin }) {
     <div className="pdf-wrap">
       {!isEditing && (
         <div className="pdf-toolbar no-print">
-          <div>{dept.updatedAt && <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis à jour : {fmtDateTime(dept.updatedAt)}</span>}</div>
+          <div>{dept[updatedAtField] && <span style={{ fontSize: 11, color: 'var(--muted)' }}>Mis à jour : {fmtDateTime(dept[updatedAtField])}</span>}</div>
           <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-outline" onClick={() => window.print()}>↓ PDF</button>{isAdmin && <button className="btn btn-primary" onClick={() => setIsEditing(true)}>✎ Modifier</button>}</div>
         </div>
       )}
@@ -132,11 +133,32 @@ function ProcedureTab({ dept, isAdmin }) {
         </div>
       ) : (
         <div className="pdf-view">
-          <div className="pdf-header"><div className="pdf-label">Document Interne</div><div className="pdf-title">{dept.name}</div></div>
-          <div className="pdf-content" dangerouslySetInnerHTML={{ __html: dept.procedure || '<p style="color:#64748B;font-style:italic">Aucune procédure rédigée.</p>' }} />
+          <div className="pdf-header"><div className="pdf-label">{docLabel}</div><div className="pdf-title">{dept.name}</div></div>
+          <div className="pdf-content" dangerouslySetInnerHTML={{ __html: dept[field] || `<p style="color:#64748B;font-style:italic">${emptyText}</p>` }} />
         </div>
       )}
     </div>
+  );
+}
+
+function ProcedureTab({ dept, isAdmin }) {
+  return (
+    <RichTextTab
+      dept={dept} isAdmin={isAdmin}
+      field="procedure" updatedAtField="updatedAt"
+      docLabel="Document Interne" emptyText="Aucune procédure rédigée."
+      keepArchive
+    />
+  );
+}
+
+function ReportTab({ dept, isAdmin }) {
+  return (
+    <RichTextTab
+      dept={dept} isAdmin={isAdmin}
+      field="weeklyReport" updatedAtField="weeklyReportUpdatedAt"
+      docLabel="Rapport Hebdomadaire" emptyText="Aucun rapport rédigé."
+    />
   );
 }
 

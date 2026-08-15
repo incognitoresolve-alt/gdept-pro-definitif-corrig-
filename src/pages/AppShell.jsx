@@ -84,9 +84,9 @@ export default function AppShell() {
                 {isAdmin && <span className="badge badge-violet" style={{ color: 'var(--brand-violet)' }}>Admin</span>}
               </div>
               <div className="tabs">
-                {['procedure', 'checklist', 'reminders', 'pending'].map(t => (
+                {['procedure', 'checklist', 'reminders', 'pending', 'report'].map(t => (
                   <button key={t} className={`tab-btn ${activeTab === t ? 'active' : ''}`} onClick={() => setActiveTab(t)}>
-                    {t === 'procedure' ? '📄 Procédure' : t === 'checklist' ? '✅ Checklist' : t === 'reminders' ? '🔔 Rappels' : '⏳ En cours'}
+                    {t === 'procedure' ? '📄 Procédure' : t === 'checklist' ? '✅ Checklist' : t === 'reminders' ? '🔔 Rappels' : t === 'pending' ? '⏳ En cours' : '🗓️ Rapport hebdo'}
                   </button>
                 ))}
               </div>

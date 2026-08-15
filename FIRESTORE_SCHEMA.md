@@ -27,6 +27,8 @@
   reminders: [{ id, text, dueDate, notified }],
   pendingTasks: [{ id, text, assignedTo }],
   archives: [...],
+  weeklyReport: string,           // rapport hebdomadaire (HTML), édité via l'onglet "Rapport hebdo"
+  weeklyReportUpdatedAt: number | null,
   createdAt: number,
   deletedAt: number | null
 }
