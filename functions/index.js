@@ -2,6 +2,17 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { defineSecret, defineString } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const Stripe = require('stripe');
+const {
+  validate,
+  createOrganizationSchema,
+  createInvitationSchema,
+  acceptInvitationSchema,
+  createCheckoutSessionSchema,
+  createBillingPortalSessionSchema,
+  assertIsResponsable,
+  mapStripeStatus,
+  intervalToPlan,
+} = require('./helpers');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -12,18 +23,19 @@ const TRIAL_DAYS = 14;
 // Secrets stockés dans Secret Manager (voir README_DEPLOIEMENT.md pour les commandes de configuration)
 const STRIPE_SECRET = defineSecret('STRIPE_SECRET');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
-// Valeur non sensible, définie dans functions/.env (voir functions/.env.example)
+// Valeurs non sensibles, définies dans functions/.env (voir functions/.env.example) — doivent
+// correspondre aux VITE_STRIPE_PRICE_MONTHLY / VITE_STRIPE_PRICE_YEARLY du frontend, et servent
+// ici à vérifier qu'un client n'envoie pas un price id arbitraire à createCheckoutSession.
 const APP_URL = defineString('APP_URL');
+const PRICE_MONTHLY = defineString('STRIPE_PRICE_MONTHLY');
+const PRICE_YEARLY = defineString('STRIPE_PRICE_YEARLY');
 
 // ---------------------------------------------------------------
 // 1. Création d'une organisation à l'inscription
 // ---------------------------------------------------------------
 exports.createOrganization = onCall({ region: REGION }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
-  const { churchName, email } = request.data;
-  if (!churchName || !churchName.trim()) {
-    throw new HttpsError('invalid-argument', "Le nom de l'église est requis.");
-  }
+  const { churchName, email } = validate(createOrganizationSchema, request.data);
   const uid = request.auth.uid;
 
   const orgRef = db.collection('organizations').doc();
@@ -64,11 +76,8 @@ exports.createOrganization = onCall({ region: REGION }, async (request) => {
 // ---------------------------------------------------------------
 exports.createInvitation = onCall({ region: REGION }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
-  const { orgId, email, role } = request.data;
-  if (!orgId || !email || !['RESPONSABLE', 'EQUIPE'].includes(role)) {
-    throw new HttpsError('invalid-argument', 'Paramètres invalides.');
-  }
-  await assertIsResponsable(request.auth.uid, orgId);
+  const { orgId, email, role } = validate(createInvitationSchema, request.data);
+  await assertIsResponsable(db, request.auth.uid, orgId);
 
   const token = db.collection('_').doc().id; // génère un id aléatoire réutilisé comme token
   const now = Date.now();
@@ -81,7 +90,7 @@ exports.createInvitation = onCall({ region: REGION }, async (request) => {
 
 exports.acceptInvitation = onCall({ region: REGION }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
-  const { orgId, token } = request.data;
+  const { orgId, token } = validate(acceptInvitationSchema, request.data);
   const uid = request.auth.uid;
 
   const inviteRef = db.collection('organizations').doc(orgId).collection('invitations').doc(token);
@@ -108,8 +117,12 @@ exports.acceptInvitation = onCall({ region: REGION }, async (request) => {
 exports.createCheckoutSession = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   const stripe = Stripe(STRIPE_SECRET.value());
-  const { orgId, priceId } = request.data;
-  await assertIsResponsable(request.auth.uid, orgId);
+  const { orgId, priceId } = validate(createCheckoutSessionSchema, request.data);
+  const allowedPrices = [PRICE_MONTHLY.value(), PRICE_YEARLY.value()].filter(Boolean);
+  if (!allowedPrices.includes(priceId)) {
+    throw new HttpsError('invalid-argument', 'Prix invalide.');
+  }
+  await assertIsResponsable(db, request.auth.uid, orgId);
 
   const orgRef = db.collection('organizations').doc(orgId);
   const org = (await orgRef.get()).data();
@@ -143,8 +156,8 @@ exports.createCheckoutSession = onCall({ region: REGION, secrets: [STRIPE_SECRET
 exports.createBillingPortalSession = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   const stripe = Stripe(STRIPE_SECRET.value());
-  const { orgId } = request.data;
-  await assertIsResponsable(request.auth.uid, orgId);
+  const { orgId } = validate(createBillingPortalSessionSchema, request.data);
+  await assertIsResponsable(db, request.auth.uid, orgId);
 
   const org = (await db.collection('organizations').doc(orgId).get()).data();
   if (!org.stripeCustomerId) throw new HttpsError('failed-precondition', 'Aucun abonnement Stripe pour cette église.');
@@ -217,27 +230,3 @@ exports.stripeWebhook = onRequest({ region: REGION, secrets: [STRIPE_SECRET, STR
     res.status(500).send('Erreur interne');
   }
 });
-
-// ---------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------
-async function assertIsResponsable(uid, orgId) {
-  const userSnap = await db.collection('users').doc(uid).get();
-  const user = userSnap.data();
-  if (!user || user.orgId !== orgId || (user.role !== 'RESPONSABLE' && user.role !== 'SUPER_ADMIN')) {
-    throw new HttpsError('permission-denied', "Action réservée au responsable de l'église.");
-  }
-}
-
-function mapStripeStatus(status) {
-  if (status === 'active' || status === 'trialing') return 'active';
-  if (status === 'past_due' || status === 'unpaid') return 'past_due';
-  if (status === 'canceled') return 'canceled';
-  return status;
-}
-
-function intervalToPlan(interval) {
-  if (interval === 'month') return 'monthly';
-  if (interval === 'year') return 'yearly';
-  return null;
-}

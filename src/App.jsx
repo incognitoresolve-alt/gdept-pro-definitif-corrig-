@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -12,8 +11,10 @@ import AppShell from './pages/AppShell';
 import Settings from './pages/Settings';
 import SuperAdmin from './pages/SuperAdmin';
 import { MentionsLegales, Confidentialite } from './pages/Legal';
+import { useDocumentTitle } from './lib/useDocumentTitle';
 
 function NotFound() {
+  useDocumentTitle('Page introuvable');
   return (
     <div className="site-scroll">
       <SiteHeader />

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, functions } from '../firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function Signup() {
+  useDocumentTitle('Créer mon espace');
   const [churchName, setChurchName] = useState('');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');

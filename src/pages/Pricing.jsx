@@ -1,15 +1,17 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { SiteHeader, SiteFooter } from './Landing';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 const FAQS = [
   { q: "Peut-on résilier à tout moment ?", a: "Oui. Vous gérez votre abonnement vous-même depuis les paramètres, sans nous contacter, et vous gardez l'accès jusqu'à la fin de la période déjà payée." },
   { q: "Où sont hébergées les données de notre église ?", a: "Sur des serveurs européens (Google Cloud / Firebase, région Europe), conformes RGPD. Vos données restent uniquement visibles par les membres de votre église." },
   { q: "Combien de membres d'équipe peut-on inviter ?", a: "Autant que nécessaire, sans supplément — le prix ne dépend pas du nombre de bénévoles ou de responsables." },
   { q: "Y a-t-il un engagement de durée ?", a: "Aucun. Le plan mensuel est sans engagement, le plan annuel est payé une fois par an au tarif réduit." },
+  { q: "Y a-t-il une application mobile ?", a: "G-Dept Pro s'utilise directement depuis le navigateur de votre téléphone, sans rien installer — l'interface est conçue pour le mobile au même titre que l'ordinateur." },
 ];
 
 export default function Pricing() {
+  useDocumentTitle('Tarifs');
   return (
     <div className="site-scroll">
       <SiteHeader />

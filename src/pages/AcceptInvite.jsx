@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db, auth, functions } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function AcceptInvite() {
+  useDocumentTitle("Rejoindre l'équipe");
   const { orgId, token } = useParams();
   const navigate = useNavigate();
   const [invite, setInvite] = useState(null);
