@@ -1,7 +1,8 @@
-import React from 'react';
 import { SiteHeader, SiteFooter } from './Landing';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export function MentionsLegales() {
+  useDocumentTitle('Mentions légales');
   return (
     <div className="site-scroll">
       <SiteHeader />
@@ -21,6 +22,7 @@ export function MentionsLegales() {
 }
 
 export function Confidentialite() {
+  useDocumentTitle('Politique de confidentialité');
   return (
     <div className="site-scroll">
       <SiteHeader />

@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { computeTrialDaysLeft, computeSubscriptionOk } from '../lib/subscription';
 
 /*
  * RECONSTRUCTION — ce fichier n'existait dans aucun commit du dépôt (vérifié
@@ -81,14 +82,8 @@ export function AuthProvider({ children }) {
   const isSuperAdmin = userDoc?.role === 'SUPER_ADMIN';
   const isResponsable = userDoc?.role === 'RESPONSABLE';
 
-  const trialDaysLeft = org?.trialEndsAt
-    ? Math.max(0, Math.ceil((org.trialEndsAt - Date.now()) / 86400000))
-    : 0;
-
-  const subscriptionOk =
-    isSuperAdmin ||
-    org?.subscriptionStatus === 'active' ||
-    (org?.subscriptionStatus === 'trialing' && (org?.trialEndsAt ?? 0) > Date.now());
+  const trialDaysLeft = computeTrialDaysLeft(org);
+  const subscriptionOk = computeSubscriptionOk({ isSuperAdmin, org });
 
   const signOut = () => firebaseSignOut(auth);
 

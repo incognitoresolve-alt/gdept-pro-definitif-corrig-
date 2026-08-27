@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function Login() {
+  useDocumentTitle('Connexion');
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +19,7 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       navigate('/app');
-    } catch (err) {
+    } catch {
       setError('Email ou mot de passe incorrect.');
     } finally {
       setBusy(false);

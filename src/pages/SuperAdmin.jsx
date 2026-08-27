@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { computeMrr } from '../lib/subscription';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function SuperAdmin() {
+  useDocumentTitle('Back-office');
   const { isSuperAdmin, signOut } = useAuth();
   const [orgs, setOrgs] = useState([]);
 
@@ -18,7 +21,7 @@ export default function SuperAdmin() {
 
   const active = orgs.filter(o => o.subscriptionStatus === 'active');
   const trialing = orgs.filter(o => o.subscriptionStatus === 'trialing');
-  const mrr = active.reduce((sum, o) => sum + (o.plan === 'yearly' ? 200 / 12 : 19.99), 0);
+  const mrr = computeMrr(orgs);
 
   return (
     <div className="settings-wrap">

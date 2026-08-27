@@ -1,20 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { db, functions } from '../firebase';
 import { collection, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '../context/AuthContext';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function Settings() {
-  const { org, isResponsable, userDoc } = useAuth();
+  useDocumentTitle('Paramètres');
+  const { org, isResponsable } = useAuth();
   const [members, setMembers] = useState([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('EQUIPE');
   const [inviteLink, setInviteLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [orgName, setOrgName] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Capturé une seule fois au montage puis conservé en state, pour que le
+  // message reste affiché même une fois le paramètre ?checkout=... retiré
+  // de l'URL (sinon il disparaîtrait au re-rendu suivant).
+  const [checkoutResult] = useState(() => searchParams.get('checkout'));
 
   const orgId = org?.id;
+
+  useEffect(() => {
+    if (!checkoutResult) return;
+    setSearchParams((prev) => { prev.delete('checkout'); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { if (org?.name) setOrgName(org.name); }, [org?.name]);
 
@@ -73,6 +86,17 @@ export default function Settings() {
     <div className="settings-wrap">
       <Link to="/app" className="settings-back">← Retour à l'application</Link>
       <h2>Paramètres de l'église</h2>
+
+      {checkoutResult === 'success' && (
+        <div className="settings-status" style={{ color: 'var(--accent-hover)', fontWeight: 700, marginBottom: 8 }}>
+          ✓ Merci ! Votre paiement a été confirmé, votre abonnement est en cours d'activation.
+        </div>
+      )}
+      {checkoutResult === 'cancel' && (
+        <div className="settings-status" style={{ color: 'var(--danger)', marginBottom: 8 }}>
+          Paiement annulé — aucun montant n'a été prélevé, vous pouvez réessayer ci-dessous.
+        </div>
+      )}
 
       <section className="settings-section">
         <h3>Nom de l'église</h3>

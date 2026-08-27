@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
@@ -7,9 +7,11 @@ import Sidebar from '../components/Sidebar';
 import TabContent from '../components/TabContent';
 import TrialBanner from '../components/TrialBanner';
 import PaywallScreen from '../components/PaywallScreen';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function AppShell() {
   const { org, isResponsable, signOut, subscriptionOk } = useAuth();
+  useDocumentTitle(org?.name || 'Application');
   const [departments, setDepartments] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [activeTab, setActiveTab] = useState('procedure');
